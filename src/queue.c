@@ -1606,8 +1606,10 @@ DISPATCH_NOINLINE
 static void
 __DISPATCH_WAIT_FOR_QUEUE__(dispatch_sync_context_t dsc, dispatch_queue_t dq)
 {
+	// 获取队列的状态，看是否是处于等待状态
 	uint64_t dq_state = _dispatch_wait_prepare(dq);
 	if (unlikely(_dq_state_drain_locked_by(dq_state, dsc->dsc_waiter))) {
+		// 死锁报错
 		DISPATCH_CLIENT_CRASH((uintptr_t)dq_state,
 				"dispatch_sync called on queue "
 				"already owned by current thread");
@@ -1720,7 +1722,9 @@ _dispatch_sync_f_slow(dispatch_queue_class_t top_dqu, void *ctxt,
 		.dsc_waiter  = _dispatch_tid_self(),
 	};
 
+	// 压栈操作
 	_dispatch_trace_item_push(top_dq, &dsc);
+	// 崩溃栈中出现的最后一个函数
 	__DISPATCH_WAIT_FOR_QUEUE__(&dsc, dq);
 
 	if (dsc.dsc_func == NULL) {
@@ -1784,6 +1788,8 @@ _dispatch_barrier_sync_f_inline(dispatch_queue_t dq, void *ctxt,
 	//
 	// Global concurrent queues and queues bound to non-dispatch threads
 	// always fall into the slow case, see DISPATCH_ROOT_QUEUE_STATE_INIT_VALUE
+	
+	// 死锁会产生的位置
 	if (unlikely(!_dispatch_queue_try_acquire_barrier_sync(dl, tid))) {
 		return _dispatch_sync_f_slow(dl, ctxt, func, DC_FLAG_BARRIER, dl,
 				DC_FLAG_BARRIER | dc_flags);
@@ -1821,9 +1827,11 @@ _dispatch_sync_f_inline(dispatch_queue_t dq, void *ctxt,
 		dispatch_function_t func, uintptr_t dc_flags)
 {
 	if (likely(dq->dq_width == 1)) {
+		// 串行队列走这里
 		return _dispatch_barrier_sync_f(dq, ctxt, func, dc_flags);
 	}
 
+	// 并发队列继续往下走
 	if (unlikely(dx_metatype(dq) != _DISPATCH_LANE_TYPE)) {
 		DISPATCH_CLIENT_CRASH(0, "Queue type doesn't support dispatch_sync");
 	}
@@ -6102,6 +6110,7 @@ _dispatch_root_queue_poke_slow(dispatch_queue_global_t dq, int n, int floor)
 	int remaining = n;
 	int r = ENOSYS;
 
+	// ✅队列初始化，runtime强转等操作，防止类型无法匹配等情况
 	_dispatch_root_queues_init();
 	_dispatch_debug_root_queue(dq, __func__);
 	_dispatch_trace_runtime_event(worker_request, dq, (uint64_t)n);
@@ -6144,8 +6153,10 @@ _dispatch_root_queue_poke_slow(dispatch_queue_global_t dq, int n, int floor)
 
 	int can_request, t_count;
 	// seq_cst with atomic store to tail <rdar://problem/16932833>
+	// ✅获取线程池的大小
 	t_count = os_atomic_load2o(dq, dgq_thread_pool_size, ordered);
 	do {
+		// ✅计算可以请求的数量
 		can_request = t_count < floor ? 0 : t_count - floor;
 		if (remaining > can_request) {
 			_dispatch_root_queue_debug("pthread pool reducing request from %d to %d",
@@ -6154,6 +6165,7 @@ _dispatch_root_queue_poke_slow(dispatch_queue_global_t dq, int n, int floor)
 			remaining = can_request;
 		}
 		if (remaining == 0) {
+			// 线程池无可用将会报错
 			_dispatch_root_queue_debug("pthread pool is full for root queue: "
 					"%p", dq);
 			return;
@@ -6171,6 +6183,7 @@ _dispatch_root_queue_poke_slow(dispatch_queue_global_t dq, int n, int floor)
 #endif
 	do {
 		_dispatch_retain(dq); // released in _dispatch_worker_thread
+		// ✅开辟线程✅
 		while ((r = pthread_create(pthr, attr, _dispatch_worker_thread, dq))) {
 			if (r != EAGAIN) {
 				(void)dispatch_assume_zero(r);

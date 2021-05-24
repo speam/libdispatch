@@ -1362,6 +1362,7 @@ _dispatch_queue_try_acquire_barrier_sync_and_suspend(dispatch_lane_t dq,
 			(suspend_count * DISPATCH_QUEUE_SUSPEND_INTERVAL);
 	uint64_t old_state, new_state;
 
+	// 从底层获取信息 -- 状态信息 - 当前队列 - 线程
 	return os_atomic_rmw_loop2o(dq, dq_state, old_state, new_state, acquire, {
 		uint64_t role = old_state & DISPATCH_QUEUE_ROLE_MASK;
 		if (old_state != (init | role)) {
@@ -2618,6 +2619,7 @@ _dispatch_continuation_init_f(dispatch_continuation_t dc,
 {
 	pthread_priority_t pp = 0;
 	dc->dc_flags = dc_flags | DC_FLAG_ALLOCATED;
+	// ✅保存block任务
 	dc->dc_func = f;
 	dc->dc_ctxt = ctxt;
 	// in this context DISPATCH_BLOCK_HAS_PRIORITY means that the priority

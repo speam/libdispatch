@@ -51,6 +51,7 @@ DISPATCH_NOINLINE
 void
 dispatch_once_f(dispatch_once_t *val, void *ctxt, dispatch_function_t func)
 {
+	// 如果你来过一次 -- 下次就不来
 	dispatch_once_gate_t l = (dispatch_once_gate_t)val;
 
 #if !DISPATCH_ONCE_INLINE_FASTPATH || DISPATCH_ONCE_USE_QUIESCENT_COUNTER
